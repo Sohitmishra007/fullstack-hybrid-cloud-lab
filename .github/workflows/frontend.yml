@@ -30,12 +30,12 @@ jobs:
 
       - name: Configure Docker for Artifact Registry
         run: |
-          REGION=${{ secrets.GCP_REGION }}
-          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+          # REGION=${{ secrets.GCP_REGION }} # This variable is not strictly needed here
+          gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
 
       - name: Build Docker Image for Frontend
         run: |
-          docker build -t ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend/frontend:latest ./frontend
+          docker build -f ./frontend/Dockerfile -t ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend/frontend:latest ./frontend
 
       - name: Push Docker Image to Artifact Registry
         run: |
@@ -48,4 +48,3 @@ jobs:
             --region=${{ secrets.GCP_REGION }} \
             --platform=managed \
             --allow-unauthenticated
-
