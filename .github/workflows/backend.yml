@@ -47,7 +47,7 @@ jobs:
           ls -laF ./backend/
 
           # CRITICAL FIX: Remove any trailing newlines or spaces from the repository name
-          # Use 'xargs' which handles leading/trailing whitespace and newlines robustly
+          # Using 'xargs' to robustly trim whitespace
           CLEANED_ECR_REPOSITORY_NAME=$(echo "$ECR_REPOSITORY_NAME_RAW" | xargs)
 
           echo "--- DEBUG: Original ECR_REPOSITORY_NAME_RAW (enclosed in quotes): '${ECR_REPOSITORY_NAME_RAW}'"
@@ -68,36 +68,42 @@ jobs:
           echo "Pushing Docker image: $FULL_IMAGE_URI"
           docker push "$FULL_IMAGE_URI"
 
-      - name: Render Amazon ECS task definition # <-- NEW STEP!
+      - name: Render Amazon ECS task definition
         id: render-task-definition
         run: |
-          # Construct the full image URI
-          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}"
+          # Robustly clean registry, repository, and tag
+          ECR_REGISTRY_CLEAN=$(echo "${{ steps.login-ecr.outputs.registry }}" | xargs)
+          ECR_REPOSITORY_CLEAN=$(echo "${{ secrets.ECR_REPOSITORY }}" | xargs)
+          IMAGE_TAG_CLEAN=$(echo "${{ github.sha }}" | xargs)
+
+          # Construct the IMAGE_URI using cleaned components
+          IMAGE_URI="$ECR_REGISTRY_CLEAN/$ECR_REPOSITORY_CLEAN:$IMAGE_TAG_CLEAN"
           
+          echo "--- DEBUG: Final IMAGE_URI being used in jq (enclosed in quotes): '${IMAGE_URI}'"
+
           # Read the task definition JSON
           TASK_DEFINITION_JSON=$(cat ./backend/task-definition.json)
           
-          # Use jq to update the 'image' field for the 'backend' container
-          # This command finds the 'containerDefinitions' array,
-          # maps over its elements, and if the container 'name' is "backend",
-          # it updates its 'image' field to the full IMAGE_URI.
-          UPDATED_TASK_DEFINITION=$(echo "$TASK_DEFINITION_JSON" | jq --arg IMAGE_URI "$IMAGE_URI" \
+          # Use jq to update the 'image' field for the 'backend' container.
+          # The '-c' flag ensures compact (single-line) output, which is safer for this purpose.
+          # The entire JSON object is modified and then outputted as a single line.
+          UPDATED_TASK_DEFINITION=$(echo "$TASK_DEFINITION_JSON" | jq -c --arg IMAGE_URI "$IMAGE_URI" \
             '.containerDefinitions |= map(if .name == "backend" then .image = $IMAGE_URI else . end)' \
           )
           
-          # Output the modified task definition to a new file
-          echo "$UPDATED_TASK_DEFINITION" > task-definition-output.json
+          # Output the modified task definition to a new file.
+          # Using printf instead of echo to prevent any unexpected trailing newlines.
+          printf "%s" "$UPDATED_TASK_DEFINITION" > task-definition-output.json
           
-          # Debugging: Print the content of the generated file (optional, but good for troubleshooting)
-          echo "--- Generated Task Definition for Deployment ---"
+          # Debugging: Print the content of the generated file
+          echo "--- Generated Task Definition for Deployment (compact) ---"
           cat task-definition-output.json
-          echo "------------------------------------------------"
+          echo "--------------------------------------------------------"
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: task-definition-output.json # <-- Now using the dynamically generated file!
+          task-definition: task-definition-output.json # Using the dynamically generated file!
           service: ${{ secrets.ECS_SERVICE }}
           cluster: ${{ secrets.ECS_CLUSTER }}
-          # Removed container-name and image inputs as they are not supported by @v1
           wait-for-service-stability: true
