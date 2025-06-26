@@ -2,45 +2,34 @@ name: Build & Deploy Frontend to Cloud Run
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
     paths:
       - 'frontend/**'
+      - '.github/workflows/frontend.yml'
 
 env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.GCP_REGION }}
   SERVICE_NAME: frontend-service
-  REGION: us-central1
-  REPO_NAME: frontend-repo
   IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend-repo/frontend
 
 jobs:
   build-and-deploy:
-    name: Build & Deploy Frontend
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
         with:
-          node-version: '18'
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
 
-      - name: Install frontend dependencies & build
-        working-directory: ./frontend
-        run: |
-          npm install
-          npm run build
-
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v3
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
-
-      - name: Configure Docker for Artifact Registry
+      - name: Authenticate Docker to Artifact Registry
         run: |
           gcloud auth configure-docker us-central1-docker.pkg.dev
 
@@ -48,7 +37,7 @@ jobs:
         run: |
           docker build -t $IMAGE ./frontend
 
-      - name: Push Docker image to Artifact Registry
+      - name: Push Docker image
         run: |
           docker push $IMAGE
 
@@ -56,7 +45,6 @@ jobs:
         run: |
           gcloud run deploy $SERVICE_NAME \
             --image $IMAGE \
-            --region $REGION \
             --platform managed \
-            --allow-unauthenticated \
-            --project ${{ secrets.GCP_PROJECT_ID }}
+            --region $REGION \
+            --allow-unauthenticated
