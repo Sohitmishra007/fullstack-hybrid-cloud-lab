@@ -6,43 +6,43 @@ on:
       - main
     paths:
       - 'frontend/**'
+      - '.github/workflows/frontend.yml'
 
 env:
-  SERVICE_NAME: frontend-service
-  REGION: us-central1
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REPO_NAME: frontend-repo
+  REGION: ${{ secrets.GCP_REGION }}
+  SERVICE_NAME: frontend-service
+  IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend-repo/frontend
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
 
-      - name: Authenticate Docker with Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+    - name: Authenticate Docker with Artifact Registry
+      run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-      - name: Build Docker image
-        run: |
-          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend-repo/frontend-image:latest ./frontend
+    - name: Build Docker image
+      run: |
+        docker build -t $IMAGE ./frontend
 
-      - name: Push Docker image to Artifact Registry
-        run: |
-          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend-repo/frontend-image:latest
+    - name: Push Docker image
+      run: |
+        docker push $IMAGE
 
-      - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy $SERVICE_NAME \
-            --image=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend-repo/frontend-image:latest \
-            --platform=managed \
-            --region=$REGION \
-            --allow-unauthenticated
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy $SERVICE_NAME \
+          --image $IMAGE \
+          --region $REGION \
+          --pl
