@@ -1,41 +1,52 @@
-name: Frontend CI/CD to Cloud Run
+name: Build & Deploy Frontend
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend.yml'
 
 jobs:
-  build-deploy:
-    name: Build & Deploy Frontend
+  build-and-deploy:
+    name: Build & Deploy Frontend to Cloud Run
     runs-on: ubuntu-latest
 
+    env:
+      SERVICE_NAME: frontend-service
+      IMAGE_NAME: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend-repo/frontend
+
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Set up Google Cloud CLI
-        uses: google-github-actions/auth@v2
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          node-version: 18
 
-      - name: Configure Docker to use Artifact Registry
-        run: |
-          gcloud auth configure-docker "us-central1-docker.pkg.dev" --quiet
-
-      - name: Set environment variables
-        run: |
-          echo "IMAGE_NAME=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend/frontend-image:latest" >> $GITHUB_ENV
-          echo "SERVICE_NAME=frontend-service" >> $GITHUB_ENV
-
-      - name: Build Docker image
+      - name: Install Dependencies and Build
         working-directory: ./frontend
         run: |
-          docker build -t $IMAGE_NAME .
+          npm install
+          npm run build
 
-      - name: Push Docker image to Artifact Registry
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker to use gcloud credentials
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build Docker Image
+        run: |
+          docker build -t $IMAGE_NAME ./frontend
+
+      - name: Push Docker Image to Artifact Registry
         run: |
           docker push $IMAGE_NAME
 
