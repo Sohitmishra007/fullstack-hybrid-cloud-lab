@@ -32,17 +32,17 @@ jobs:
       - name: Build, tag, and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPO }} # Use the ECR_REPO secret
+          ECR_REPOSITORY_NAME: ${{ secrets.ECR_REPOSITORY }} # Changed from secrets.ECR_REPO
           IMAGE_TAG: ${{ github.sha }}
         run: |
           # Navigate into the backend directory first
           cd backend
 
           # Build Docker image from the current directory (which is now 'backend/')
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG .
 
-          echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG"
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
