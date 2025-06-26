@@ -2,53 +2,52 @@ name: Build & Deploy Backend to ECS
 
 on:
   push:
-    branches:
-      - main
     paths:
       - 'backend/**'
       - '.github/workflows/backend.yml'
+    branches:
+      - main
 
 jobs:
   deploy:
+    name: Deploy
     runs-on: ubuntu-latest
-
-    env:
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-      ECS_CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
-      ECS_SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
-      ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
-      IMAGE_TAG: ${{ github.sha }}
+    environment: production # You might want to define this environment in GitHub settings
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build, tag, and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPO }} # Use the ECR_REPO secret
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "Building Docker image: $IMAGE_URI"
-          docker build -t $IMAGE_URI ./backend
-          docker push $IMAGE_URI
-          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          # Navigate into the backend directory first
+          cd backend
+
+          # Build Docker image from the current directory (which is now 'backend/')
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+
+          echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: ${{ env.ECS_TASK_DEFINITION }}
-          service: ${{ env.ECS_SERVICE_NAME }}
-          cluster: ${{ env.ECS_CLUSTER_NAME }}
+          task-definition: your-task-definition-file.json # Replace with your task definition file path
+          service: ${{ secrets.ECS_SERVICE }}
+          cluster: ${{ secrets.ECS_CLUSTER }}
           wait-for-service-stability: true
