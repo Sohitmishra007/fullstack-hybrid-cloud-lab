@@ -12,7 +12,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    environment: production # You might want to define this environment in GitHub settings
+    environment: production
 
     steps:
       - name: Checkout code
@@ -25,6 +25,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # --- NEW DEBUGGING STEP for AWS Region ---
+      - name: Debug AWS Region Secret
+        run: |
+          echo "AWS_REGION secret value (should be 'ap-south-1'): '${{ secrets.AWS_REGION }}'"
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -32,7 +37,7 @@ jobs:
       - name: Build, tag, and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY_NAME_RAW: ${{ secrets.ECR_REPOSITORY }} # Use a temporary variable for raw value
+          ECR_REPOSITORY_NAME_RAW: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "--- DEBUG: Current working directory (should be repo root) ---"
@@ -42,25 +47,27 @@ jobs:
           echo "--- DEBUG: Listing contents of backend/ directory (checking for Dockerfile) ---"
           ls -laF ./backend/
 
-          # CRITICAL FIX: Remove any trailing newlines from the repository name
-          # This takes the raw secret, echoes it, and pipes it to tr -d '\n' to delete newlines
-          CLEANED_ECR_REPOSITORY_NAME=$(echo -n "$ECR_REPOSITORY_NAME_RAW" | tr -d '\n')
+          # CRITICAL FIX: Remove any trailing newlines or spaces from the repository name
+          # Use 'xargs' which handles leading/trailing whitespace and newlines robustly
+          CLEANED_ECR_REPOSITORY_NAME=$(echo "$ECR_REPOSITORY_NAME_RAW" | xargs)
 
-          echo "--- DEBUG: Original ECR_REPOSITORY_NAME_RAW: '$ECR_REPOSITORY_NAME_RAW'"
-          echo "--- DEBUG: Cleaned ECR_REPOSITORY_NAME: '$CLEANED_ECR_REPOSITORY_NAME'"
-          echo "--- DEBUG: Docker build command being executed with cleaned name: ---"
-          echo "docker build -f ./backend/Dockerfile -t $ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG ./backend"
+          echo "--- DEBUG: Original ECR_REPOSITORY_NAME_RAW (enclosed in quotes): '${ECR_REPOSITORY_NAME_RAW}'"
+          echo "--- DEBUG: Cleaned ECR_REPOSITORY_NAME (enclosed in quotes): '${CLEANED_ECR_REPOSITORY_NAME}'"
+
+          # Construct the full image URI for clarity
+          FULL_IMAGE_URI="$ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG"
+
+          echo "--- DEBUG: Full Docker Image URI (enclosed in quotes): '${FULL_IMAGE_URI}'"
           echo "----------------------------------------------------"
 
-          # The build context is 'backend/' because pom.xml is there for mvn clean package.
-          # The Dockerfile path is specified relative to the repository root.
+          # The actual docker build command
           docker build \
             -f ./backend/Dockerfile \
-            -t "$ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG" \
+            -t "$FULL_IMAGE_URI" \
             ./backend # This is the build context
 
-          echo "Building Docker image: $ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG"
-          docker push "$ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG"
+          echo "Pushing Docker image: $FULL_IMAGE_URI"
+          docker push "$FULL_IMAGE_URI"
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
