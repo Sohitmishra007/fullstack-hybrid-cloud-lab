@@ -31,7 +31,9 @@ jobs:
 
       - name: Authenticate Docker to Artifact Registry
         run: |
-          gcloud auth configure-docker us-central1-docker.pkg.dev
+          echo "$GCP_SA_KEY" > /tmp/key.json
+          gcloud auth activate-service-account --key-file=/tmp/key.json
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Build Docker image
         run: |
@@ -48,3 +50,5 @@ jobs:
             --platform managed \
             --region $REGION \
             --allow-unauthenticated
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
