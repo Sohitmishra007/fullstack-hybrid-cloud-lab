@@ -25,7 +25,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # --- NEW DEBUGGING STEP for AWS Region ---
       - name: Debug AWS Region Secret
         run: |
           echo "AWS_REGION secret value (should be 'ap-south-1'): '${{ secrets.AWS_REGION }}'"
@@ -72,7 +71,7 @@ jobs:
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: your-task-definition-file.json # IMPORTANT: Replace with your task definition file path!
+          task-definition: ./backend/task-definition.json # <-- CORRECTED PATH!
           service: ${{ secrets.ECS_SERVICE }}
           cluster: ${{ secrets.ECS_CLUSTER }}
           wait-for-service-stability: true
