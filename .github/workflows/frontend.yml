@@ -3,36 +3,50 @@ name: Frontend CI/CD to Cloud Run
 on:
   push:
     paths:
-      - "frontend/**"
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+    branches:
+      - main
 
 jobs:
   deploy:
+    name: Build & Deploy Frontend
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Authenticate to Google Cloud
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Set up gcloud
+      - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'gcloud'
 
-      - name: Build and Push Docker Image
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build Docker Image for Frontend
         run: |
-          gcloud auth configure-docker
-          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/frontend:${{ github.sha }} ./frontend
-          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/frontend:${{ github.sha }}
+          docker build -t ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend/frontend:latest ./frontend
+
+      - name: Push Docker Image to Artifact Registry
+        run: |
+          docker push ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend/frontend:latest
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy frontend-service \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/frontend:${{ github.sha }} \
-            --platform managed \
-            --region ${{ secrets.GCP_REGION }} \
+            --image=${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/frontend/frontend:latest \
+            --region=${{ secrets.GCP_REGION }} \
+            --platform=managed \
             --allow-unauthenticated
 
