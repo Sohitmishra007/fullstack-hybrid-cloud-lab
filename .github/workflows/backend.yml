@@ -32,14 +32,15 @@ jobs:
       - name: Build, tag, and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY_NAME: ${{ secrets.ECR_REPOSITORY }} # Changed from secrets.ECR_REPO
+          ECR_REPOSITORY_NAME: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Navigate into the backend directory first
-          cd backend
-
-          # Build Docker image from the current directory (which is now 'backend/')
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG .
+          # The build context is 'backend/' because pom.xml is there for mvn clean package.
+          # The Dockerfile path is specified relative to this context.
+          docker build \
+            -f ./backend/src/main/java/com/example/taskbackend/Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG \
+            ./backend # This is the build context
 
           echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG"
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG
@@ -47,7 +48,7 @@ jobs:
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: your-task-definition-file.json # Replace with your task definition file path
+          task-definition: your-task-definition-file.json # Remember to replace with your path!
           service: ${{ secrets.ECS_SERVICE }}
           cluster: ${{ secrets.ECS_CLUSTER }}
           wait-for-service-stability: true
