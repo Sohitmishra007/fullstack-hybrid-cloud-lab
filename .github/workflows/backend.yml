@@ -12,7 +12,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    environment: production # You might want to define this environment in GitHub settings
+    environment: production
 
     steps:
       - name: Checkout code
@@ -35,15 +35,47 @@ jobs:
           ECR_REPOSITORY_NAME: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # The build context is 'backend/' because pom.xml is there for mvn clean package.
-          # The Dockerfile path is specified relative to this context.
+          echo "--- DEBUG: Current working directory (should be repo root) ---"
+          pwd
+
+          echo "--- DEBUG: Listing contents of repository root ---"
+          ls -laF # List all files/dirs, append indicators
+
+          echo "--- DEBUG: Listing contents of backend/ directory ---"
+          ls -laF ./backend/
+
+          echo "--- DEBUG: Listing contents of backend/src/main/java/com/example/taskbackend/ directory ---"
+          ls -laF ./backend/src/main/java/com/example/taskbackend/
+
+          # Verify Dockerfile presence and content
+          DOCKERFILE_PATH="./backend/src/main/java/com/example/taskbackend/Dockerfile"
+          CONTEXT_PATH="./backend"
+
+          echo "--- DEBUG: Verifying Dockerfile at: $DOCKERFILE_PATH ---"
+          if [ -f "$DOCKERFILE_PATH" ]; then
+            echo "Dockerfile FOUND at $DOCKERFILE_PATH"
+            echo "--- DEBUG: First 10 lines of Dockerfile ---"
+            head -n 10 "$DOCKERFILE_PATH"
+            echo "--- DEBUG: Last 10 lines of Dockerfile ---"
+            tail -n 10 "$DOCKERFILE_PATH"
+          else
+            echo "ERROR: Dockerfile NOT FOUND at $DOCKERFILE_PATH"
+            # This will intentionally fail the workflow if the Dockerfile isn't found
+            exit 1
+          fi
+
+          echo "--- DEBUG: Docker build command being executed: ---"
+          echo "docker build -f $DOCKERFILE_PATH -t $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG $CONTEXT_PATH"
+          echo "----------------------------------------------------"
+
+          # The actual docker build command
           docker build \
-            -f ./backend/src/main/java/com/example/taskbackend/Dockerfile \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG \
-            ./backend # This is the build context
+            -f "$DOCKERFILE_PATH" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG" \
+            "$CONTEXT_PATH"
 
           echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG"
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG"
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
