@@ -32,25 +32,35 @@ jobs:
       - name: Build, tag, and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY_NAME: ${{ secrets.ECR_REPOSITORY }}
+          ECR_REPOSITORY_NAME_RAW: ${{ secrets.ECR_REPOSITORY }} # Use a temporary variable for raw value
           IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "--- DEBUG: Current working directory (should be repo root) ---"
           pwd
           echo "--- DEBUG: Listing contents of repository root ---"
-          ls -laF # To verify backend/ directory exists at root
+          ls -laF
           echo "--- DEBUG: Listing contents of backend/ directory (checking for Dockerfile) ---"
-          ls -laF ./backend/ # This is where your Dockerfile should be located
+          ls -laF ./backend/
+
+          # CRITICAL FIX: Remove any trailing newlines from the repository name
+          # This takes the raw secret, echoes it, and pipes it to tr -d '\n' to delete newlines
+          CLEANED_ECR_REPOSITORY_NAME=$(echo -n "$ECR_REPOSITORY_NAME_RAW" | tr -d '\n')
+
+          echo "--- DEBUG: Original ECR_REPOSITORY_NAME_RAW: '$ECR_REPOSITORY_NAME_RAW'"
+          echo "--- DEBUG: Cleaned ECR_REPOSITORY_NAME: '$CLEANED_ECR_REPOSITORY_NAME'"
+          echo "--- DEBUG: Docker build command being executed with cleaned name: ---"
+          echo "docker build -f ./backend/Dockerfile -t $ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG ./backend"
+          echo "----------------------------------------------------"
 
           # The build context is 'backend/' because pom.xml is there for mvn clean package.
           # The Dockerfile path is specified relative to the repository root.
           docker build \
             -f ./backend/Dockerfile \
-            -t "$ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG" \
+            -t "$ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG" \
             ./backend # This is the build context
 
-          echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG"
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY_NAME:$IMAGE_TAG"
+          echo "Building Docker image: $ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$CLEANED_ECR_REPOSITORY_NAME:$IMAGE_TAG"
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
